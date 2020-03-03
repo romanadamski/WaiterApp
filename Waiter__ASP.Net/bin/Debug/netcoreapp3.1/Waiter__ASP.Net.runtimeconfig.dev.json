@@ -1,0 +1,8 @@
+{
+  "runtimeOptions": {
+    "additionalProbingPaths": [
+      "C:\\Users\\rada\\.dotnet\\store\\|arch|\\|tfm|",
+      "C:\\Users\\rada\\.nuget\\packages"
+    ]
+  }
+}

@@ -1,0 +1,428 @@
+﻿@{
+    ViewBag.Title = "Restauracja";
+}
+<style>
+    .scroll {
+        height: 400px;
+        overflow: scroll;
+        overflow-x: hidden;
+        border: 1px solid #888;
+        background-color: lightgray;
+    }
+
+    table {
+        font-family: arial, sans-serif;
+        width: 100%;
+    }
+
+    td, th {
+        text-align: left;
+        padding: 8px;
+    }
+    /* The Modal (background) */
+    .modal {
+        display: none; /* Hidden by default */
+        position: fixed; /* Stay in place */
+        z-index: 1; /* Sit on top */
+        left: 0;
+        top: 0;
+        width: 100%; /* Full width */
+        height: 100%; /* Full height */
+        overflow: auto; /* Enable scroll if needed */
+        background-color: rgb(0,0,0); /* Fallback color */
+        background-color: rgba(0,0,0,0.3); /* Black w/ opacity */
+    }
+
+    .modal-content {
+        background-color: lightgray;
+        margin: 15% auto;
+        padding: 20px;
+        border: 3px solid #888;
+        width: 80%;
+    }
+    /* The Close Button */
+    .close {
+        color: #aaaaaa;
+        float: right;
+        font-size: 28px;
+        font-weight: bold;
+    }
+</style>
+<div class="row">
+    <label class="font-weight-bold">Wybierz stolik:</label>
+</div>
+<div class="row">
+    <select id="tables" onchange="setTableValue(this.options[this.selectedIndex].value); setTableLabel(this.options[this.selectedIndex].label); getDishes(actualTableValue);">
+        <option value="table_1">Stolik 1</option>
+        <option value="table_2">Stolik 2</option>
+        <option value="table_3">Stolik 3</option>
+        <option value="table_4">Stolik 4</option>
+        <option value="table_5">Stolik 5</option>
+        <option value="table_6">Stolik 6</option>
+        <option value="table_7">Stolik 7</option>
+        <option value="table_8">Stolik 8</option>
+        <option value="table_9">Stolik 9</option>
+        <option value="table_10">Stolik 10</option>
+    </select>
+    <button id="button_addDishes">Dodaj dania</button>
+</div>
+<div class="scroll">
+    <table id="orderT"></table>
+</div>
+<div class="scroll">
+    <div class="bg-dark">
+        <label id="tableNameDishesByTableT" style="color:lightgray" class="font-weight-bold"></label>
+    </div>
+    <table id="dishesByTableT"></table>
+</div>
+<button id="button_pay">Zapłać</button>
+<div id="dishesList" class="modal">
+    <div class="modal-content">
+        <span class="close">&times;</span>
+        <label id="tableNameDishesT" class="font-weight-bold"></label>
+        <table id="dishesT">
+            <tr>
+                <td>Nazwa</td>
+                <td>Ilość</td>
+                <td>Cena</td>
+                <td>Suma</td>
+                <td>Dodaj</td>
+            </tr>
+        </table>
+    </div>
+</div>
+<div id="payList" class="modal">
+    <div class="modal-content">
+        <label id="tableNamePayListT" class="font-weight-bold"></label>
+        <table id="payListT"></table>
+        <label id="sumPayListT" class="font-weight-bold"></label>
+    </div>
+</div>
+@section scripts {
+    <script>
+        var btn = document.getElementById("button_addDishes");
+        var btn_pay = document.getElementById("button_pay");
+
+        var modal = document.getElementById("dishesList");
+        var span = document.getElementsByClassName("close")[0];
+
+        var modal_pay = document.getElementById("payList");
+        btn.onclick = function () {
+            modal.style.display = "block";
+            document.getElementById('tableNameDishesT').innerText = actualTableLabel;
+            var dishesT = document.getElementById('dishesT');
+            for (let row of dishesT.rows) {
+                for (let cell of row.cells) {
+                    if (cell.firstChild.localName == "input") {
+                        cell.firstChild.value = 1;
+                    }
+                }
+            }
+        }
+        btn_pay.onclick = function pay() {
+            modal_pay.style.display = "block";
+            document.getElementById('tableNamePayListT').innerText = actualTableLabel;
+            $.ajax({
+                type: "GET",
+                url: "/Home/GetRecipe?tableName=" + actualTableValue,
+                contentType: "application/json; charset=utf-8",
+                dataType: "json",
+                success: function (response) {
+                    var dataObject = JSON.parse(response);
+                    var Parent = document.getElementById('payListT');
+                    while (Parent.hasChildNodes()) {
+                        Parent.removeChild(Parent.firstChild);
+                    }
+                    addHead_payListT();
+                    dataObject.OrderedDishes.forEach(fillRecipView);
+                    var tip = dataObject.TotalPrice * 0.05;
+                    var sum = dataObject.TotalPrice + tip;
+                    addTip_payListT(tip.toFixed(2));
+                    document.getElementById('sumPayListT').innerText ='Suma: ' + sum.toFixed(2) + ' $';
+                },
+                error: function () {
+                    console.log("błąd");
+                }
+            });
+            function fillRecipView(item, index) {
+                addRow_payListT(item)
+            }
+        }
+        function fillListOfDishes() {
+            var responsedJson;
+            $.ajax({
+                type: "GET",
+                url: "/Home/LoadListOfDishes",
+                contentType: "application/json; charset=utf-8",
+                dataType: "json",
+                success: function (response) {
+                    responsedJson = response;
+                    var dataObject = JSON.parse(responsedJson);
+                    dataObject.forEach(fillDishesView);
+                },
+                error: function () {
+                    console.log("błąd");
+                }
+            });
+            function fillDishesView(item, index) {
+                addRow_DishesT(item)
+            }
+        }
+        span.onclick = function () {
+            modal.style.display = "none";
+            modal_pay.style.display = "none";
+        }
+        window.onclick = function (event) {
+            if (event.target == modal) {
+                modal.style.display = "none";
+            }
+            if (event.target == modal_pay) {
+                modal_pay.style.display = "none";
+            }
+        }
+        var actualTableValue;
+        var actualTableLabel;
+        var actualTableNumber;
+        window.onload = function () {
+            addHead_OrderT();
+            loadTables(10);
+            actualTableValue = document.getElementById('tables').options[0].value;
+            actualTableLabel = document.getElementById('tables').options[0].label;
+            loadDishesByTableT();
+            getDishes(actualTableValue);
+        }
+        function loadDishesByTableT() {
+            document.getElementById('tableNameDishesByTableT').innerText = actualTableLabel;
+        }
+        function addHead_payListT() {
+            $('#payListT').append('<tr></tr>');
+            var $lastTr = $('#payListT tr:last');
+            $lastTr.append('<td><label class="font-weight-bold">Nazwa</label></td>');
+            $lastTr.append('<td><label class="font-weight-bold">Ilość</label></td>');
+            $lastTr.append('<td><label class="font-weight-bold">Cena</label></td>');
+            $lastTr.append('<td><label class="font-weight-bold">Cena łączna</label></td>');
+        }
+        function addRow_payListT(item) {
+            $('#payListT').append('<tr></tr>');
+            var $lastTr = $('#payListT tr:last');
+            $lastTr.append('<td><label>' + item.Dish.Name + '</label></td>');
+            $lastTr.append('<td><label>' + item.Amount + '</label></td>');
+            $lastTr.append('<td><label>' + item.Dish.Price  + ' $' + '</label></td>');
+            $lastTr.append('<td><label>' + item.TotalPrice + ' $' + '</label></td>');
+        }
+        function addTip_payListT(tip) {
+            $('#payListT').append('<tr></tr>');
+            var $lastTr = $('#payListT tr:last');
+            $lastTr.append('<td><label>Napiwek 5%: '+ tip +'$ </label></td>');
+            $lastTr.append('<td><label></label></td>');
+            $lastTr.append('<td><label></label></td>');
+            $lastTr.append('<td><label></label></td>');
+        }
+        function addRow_DishesT(item) {
+            $('#dishesT').append('<tr></tr>');
+            var $lastTr = $('table tr:last');
+            $lastTr.append('<td><label>' + item.Name + '</label></td>');
+            $lastTr.append('<td><input type="number" id="dishes_input_' + item.Name + '" min="1" max="100"></input></td>');
+            $lastTr.append('<td><label id = "label_price_' + item.Name + '">' + item.Price + ' $</label></td>');
+            $lastTr.append('<td><label id = "label_total_' + item.Name + '">' + item.Price + ' $</label></td>');
+            $lastTr.append('<td><button id = "addOrder_' + item.Name + '">Dodaj</button></td>');
+            document.getElementById('addOrder_' + item.Name).onclick = function () {
+                var name = item.Name;
+                var amount = document.getElementById('dishes_input_' + item.Name).value;
+                if (amount > 0 && amount <= 100)
+                    addDishToTable(name, amount);
+            }
+            document.getElementById('dishes_input_' + item.Name).onchange = function () {
+                var amount = document.getElementById('dishes_input_' + item.Name).value;
+                var price = document.getElementById('label_price_' + item.Name).innerText;
+                var total = parseFloat(amount) * parseFloat(price);
+                document.getElementById('label_total_' + item.Name).innerText = total + ' $';
+            }
+        }
+        function addDishToTable(name, amount) {
+            $.ajax({
+                type: "GET",
+                url: "/Home/AddDishToTable?tableName=" + actualTableValue + "&dishName=" + name + "&amount=" + amount,
+                contentType: "application/json; charset=utf-8",
+                dataType: "json",
+                success: function (response) {
+                    if (response.isTableInOrders == false) {
+                        addRow_OrderT(actualTableLabel, response.totalPrice, actualTableValue)
+                    }
+                    else {
+                        var mytab1 = document.getElementById('orderT');
+                        for (let row of mytab1.rows) {
+                            if (row.cells[0].innerText == actualTableLabel) {
+                                row.cells[1].innerText = response.totalPrice + ' $';
+                            }
+                        }
+                    }
+                    getDishes(actualTableValue);
+                },
+                error: function () {
+                    console.log("błąd");
+                }
+            });
+        }
+        function addHead_OrderT() {
+            $('#orderT').append('<tr></tr>');
+            var $lastTr = $('#orderT tr:last');
+            $lastTr.append('<td><label class="font-weight-bold">Nazwa</label></td>');
+            $lastTr.append('<td><label class="font-weight-bold">Cena</label></td>');
+            $lastTr.append('<td><label class="font-weight-bold">Usuń</label></td>');
+        }
+        function addRow_OrderT(name, price, value) {
+            $('#orderT').append('<tr ></tr>');
+            var $lastTr = $('#orderT tr:last');
+            $lastTr.append('<td><label id="tableName">' + name + '</label></td>')
+            $lastTr.append('<td><label id="orderPrice">' + price + ' $</label></td>')
+            $lastTr.append('<td><button id="deleteOrder_' + name + '">Usuń</label></td>')
+            document.getElementById('deleteOrder_' + name).onclick = function () {
+                $.ajax({
+                    type: "GET",
+                    url: "/Home/DeleteOrder?tableName=" + value,
+                    contentType: "application/json; charset=utf-8",
+                    dataType: "json",
+                    success: function (response) {
+                        var mytab1 = document.getElementById('orderT');
+                        for (let row of mytab1.rows) {
+                            if (row.cells[0].innerText == name) {
+                                row.remove();
+                            }
+                        }
+                        if (name == actualTableLabel)
+                            getDishes(actualTableValue);
+                    },
+                    error: function () {
+                        console.log("błąd");
+                    }
+                });
+            }
+        }
+        function addHead_dishesByTableT() {
+            $('#dishesByTableT').append('<tr></tr>');
+            var $lastTr = $('#dishesByTableT tr:last');
+            $lastTr.append('<td><label class="font-weight-bold">Nazwa</label></td>');
+            $lastTr.append('<td><label class="font-weight-bold">Ilość</label></td>');
+            $lastTr.append('<td><label class="font-weight-bold">Zmień</label></td>');
+            $lastTr.append('<td><label class="font-weight-bold">Usuń</label></td>');
+        }
+        function addRow_DishesByTableT(name, amount) {
+            $('#dishesByTableT').append('<tr></tr>');
+            var $lastTr = $('#dishesByTableT tr:last');
+            $lastTr.append('<td><label id="dishName">' + name + '</label></td>')
+            $lastTr.append('<td><input type="number" id="dishesByTable_input_' + name + '" min="1" max="100" value=' + amount + '></input></td>')
+            $lastTr.append('<td><button id="changeDish_' + name + '">Zmień</button></td>')
+            $lastTr.append('<td><button id="deleteDish_' + name + '">Usuń</button></td>')
+            document.getElementById('changeDish_' + name).onclick = function () {
+                var amount = document.getElementById('dishesByTable_input_' + name).value;
+                if (amount > 0 && amount <= 100)
+                    changeDishToTable(name, amount);
+            }
+            document.getElementById('deleteDish_' + name).onclick = function () {
+                $.ajax({
+                    type: "GET",
+                    url: "/Home/DeleteDishByTable?tableName=" + actualTableValue + "&dishName=" + name,
+                    contentType: "application/json; charset=utf-8",
+                    dataType: "json",
+                    success: function (response) {
+                        if (response.text == "success") {
+                            var mytab1 = document.getElementById('orderT');
+                            if (response.isTableInOrders == false) {
+                                for (let row of mytab1.rows) {
+                                    if (row.cells[0].innerText == actualTableLabel) {
+                                        row.remove();
+                                    }
+                                }
+                            }
+                            else {
+                                for (let row of mytab1.rows) {
+                                    if (row.cells[0].innerText == actualTableLabel) {
+                                        row.cells[1].innerText = response.totalPrice + ' $';
+                                    }
+                                }
+                            }
+                            getDishes(actualTableValue);
+                        }
+                    },
+                    error: function () {
+                        console.log("błąd");
+                    }
+                });
+            }
+        }
+        function changeDishToTable(name, amount) {
+            $.ajax({
+                type: "GET",
+                url: "/Home/ChangeDishToTable?tableName=" + actualTableValue + "&dishName=" + name + "&amount=" + amount,
+                contentType: "application/json; charset=utf-8",
+                dataType: "json",
+                success: function (response) {
+                    if (response.isTableInOrders == false) {
+                        addRow_OrderT(actualTableLabel, response.totalPrice, actualTableValue)
+                    }
+                    else {
+                        var mytab1 = document.getElementById('orderT');
+                        for (let row of mytab1.rows) {
+                            if (row.cells[0].innerText == actualTableLabel) {
+                                row.cells[1].innerText = response.totalPrice + ' $';
+                            }
+                        }
+                    }
+                    getDishes(actualTableValue);
+                },
+                error: function () {
+                    console.log("błąd");
+                }
+            });
+        }
+        function loadTables(tableAmount) {
+            $.ajax({
+                type: "GET",
+                url: "/Home/LoadRestaurationData?tableAmount=" + tableAmount,
+                contentType: "application/json; charset=utf-8",
+                dataType: "json",
+                success: function () {
+                    fillListOfDishes();
+                },
+                error: function () {
+                    console.log("błąd");
+                }
+            });
+        }
+        function setTableValue(selectObject) {
+            actualTableValue = selectObject;
+        }
+        function setTableLabel(selectObject) {
+            actualTableLabel = selectObject;
+        }
+        function getDishes(selectObject) {
+            loadDishesByTableT();
+            var Parent = document.getElementById('dishesByTableT');
+            while (Parent.hasChildNodes()) {
+                Parent.removeChild(Parent.firstChild);
+            }
+            addHead_dishesByTableT();
+            $.ajax({
+                type: "GET",
+                url: "/Home/GetDishesByTable?tableName=" + selectObject,
+                contentType: "application/json; charset=utf-8",
+                dataType: "json",
+                success: function (response) {
+                    if (response.text == "success") {
+                        var responsedJson = response.json;
+                        var dataObject = JSON.parse(responsedJson);
+                        dataObject.forEach(fillDishesByTableView);
+                    }
+                },
+                error: function () {
+                    console.log("błąd");
+                }
+            });
+            function fillDishesByTableView(item, index) {
+                addRow_DishesByTableT(item.Dish.Name, item.Amount);
+            }
+        }
+
+    </script>
+}
